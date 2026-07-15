@@ -1,0 +1,20 @@
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Python caching
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Databases and environment
+BE/wger.db
+BE/.env
+BE/uploads/
+.env
+
+# IDEs
+.vscode/
+.idea/

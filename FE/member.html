@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Member Profile — wger</title>
+<link rel="stylesheet" href="/style.css">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+<style>
+.avatar-lg {
+    width: 90px; height: 90px; border-radius: 50%;
+    background: linear-gradient(135deg, #dc2626, #991b1b);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2rem; font-weight: 800; color: white;
+    flex-shrink: 0; box-shadow: 0 4px 20px rgba(220,38,38,0.35);
+    cursor: pointer; position: relative; overflow: hidden;
+}
+.info-row { display: flex; align-items: flex-start; gap: 10px; padding: 0.6rem 0; border-bottom: 1px solid #f8fafc; }
+.info-row:last-child { border-bottom: none; }
+.info-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; width: 80px; flex-shrink: 0; padding-top: 2px; }
+.info-value { font-size: 0.875rem; color: #1e293b; font-weight: 500; }
+.heat-cell { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: 600; }
+.heat-0 { background: #f1f5f9; color: #94a3b8; }
+.heat-2 { background: rgba(220,38,38,0.5); color: white; }
+.tab-btn { padding: 0.55rem 1.1rem; border: none; background: transparent; font-size: 0.85rem; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; cursor: pointer; }
+.tab-btn.active { color: #dc2626; border-bottom-color: #dc2626; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+</style>
+</head>
+<body>
+<script src="/js/config.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+renderLayout('members', 'Member Profile');
+const memberId = new URLSearchParams(window.location.search).get('id');
+if (!memberId) window.location.href = '/members.html';
+const BASE_ORIGIN = API_BASE.replace('/api', '');
+
+function infoRow(icon, label, value) {
+  return `<div class="info-row"><span class="info-label"><i class="fas ${icon}" style="margin-right:4px;"></i>${label}</span><span class="info-value">${value}</span></div>`;
+}
+
+function fullName(m) {
+  const n = `${m.first_name || ''} ${m.last_name || ''}`.trim();
+  return n || m.username;
+}
+
+function calcAge(birthdate) {
+  if (!birthdate) return null;
+  const b = new Date(birthdate), t = new Date();
+  let age = t.getFullYear() - b.getFullYear();
+  if (t.getMonth() < b.getMonth() || (t.getMonth() === b.getMonth() && t.getDate() < b.getDate())) age--;
+  return age;
+}
+
+async function render(member, contracts, status, attendance) {
+  const initials = member.username.slice(0, 2).toUpperCase();
+  let photoUrl = null;
+  try { const s = await api.get(`/members/${memberId}/photo/status`); photoUrl = s.has_photo ? BASE_ORIGIN + s.url : null; } catch (e) { /* ignore */ }
+
+  const statusBadge = status === 'active'
+    ? '<span class="badge-active"><i class="fas fa-circle" style="font-size:0.45rem;margin-right:4px;"></i>Active</span>'
+    : status === 'expiring'
+    ? '<span class="badge-expiring"><i class="fas fa-exclamation-circle" style="margin-right:4px;"></i>Expiring Soon</span>'
+    : '<span class="badge-inactive"><i class="fas fa-circle" style="font-size:0.45rem;margin-right:4px;"></i>Inactive</span>';
+
+  const today = new Date();
+  const since = new Date(); since.setDate(since.getDate() - 30);
+  const dateRange = [];
+  for (let d = new Date(since); d <= today; d.setDate(d.getDate() + 1)) dateRange.push(new Date(d));
+  const attByDate = new Set(attendance.map((a) => a.date));
+
+  document.getElementById('pageBody').innerHTML = `
+    <div style="margin-bottom:1rem;"><a href="/members.html" style="color:#64748b;text-decoration:none;font-size:0.82rem;"><i class="fas fa-arrow-left"></i> Back to Members</a></div>
+    <div class="row g-3">
+      <div class="col-12 col-xl-4">
+        <div class="card mb-3" style="margin-bottom:1rem;">
+          <div style="background:linear-gradient(135deg,#0f172a,#1e293b);height:80px;border-radius:14px 14px 0 0;position:relative;">
+            <div style="position:absolute;bottom:-35px;left:1.5rem;">
+              <div class="avatar-lg" id="avatarBox" onclick="document.getElementById('photoInput').click()" title="Click to upload photo" style="${photoUrl ? 'background:none;padding:0;' : ''}">
+                ${photoUrl ? `<img src="${photoUrl}" style="width:100%;height:100%;object-fit:cover;">` : initials}
+              </div>
+              <input type="file" id="photoInput" accept="image/*" style="display:none;">
+            </div>
+          </div>
+          <div style="padding:3rem 1.5rem 1.25rem;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.5rem;">
+              <div><div style="font-size:1.15rem;font-weight:800;color:#0f172a;">${escapeHtml(fullName(member))}</div><div style="color:#94a3b8;font-size:0.8rem;">@${escapeHtml(member.username)}</div></div>
+              <div>${statusBadge}</div>
+            </div>
+            <div style="margin-top:1.25rem;">
+              ${infoRow('fa-envelope', 'Email', escapeHtml(member.email))}
+              ${infoRow('fa-phone', 'Phone', escapeHtml(member.phone) || '—')}
+              ${infoRow('fa-venus-mars', 'Gender', member.gender === '1' ? 'Male' : member.gender === '2' ? 'Female' : '—')}
+              ${infoRow('fa-birthday-cake', 'DOB', member.birthdate || '—')}
+              ${infoRow('fa-calendar', 'Joined', member.date_joined)}
+              ${infoRow('fa-user-tag', 'User ID', `<span style="font-family:monospace;background:#f1f5f9;padding:2px 7px;border-radius:5px;">#${member.id}</span>`)}
+              ${infoRow('fa-fingerprint', 'Device ID', `
+                <form id="deviceForm" style="display:flex;gap:6px;">
+                  <input id="deviceIdInput" value="${member.device_user_id || ''}" placeholder="e.g. 8" style="width:80px;padding:2px 6px;font-size:0.82rem;">
+                  <button type="submit" style="background:#10b981;color:#fff;border:none;padding:2px 8px;border-radius:6px;font-size:0.75rem;cursor:pointer;">Save</button>
+                </form>`)}
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-3" style="margin-bottom:1rem;">
+          <div class="card-header-plain"><h6><i class="fas fa-id-card" style="color:#dc2626;margin-right:8px;"></i>Current Membership</h6></div>
+          <div class="card-body-pad">
+            ${contracts.length ? (() => {
+              const c = contracts[0];
+              const expired = c.date_end && c.date_end < today.toISOString().slice(0, 10);
+              return `
+              <div style="background:linear-gradient(135deg,rgba(220,38,38,0.08),rgba(153,27,27,0.08));border:1px solid rgba(220,38,38,0.15);border-radius:12px;padding:1rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+                  <div><div style="font-size:1.5rem;font-weight:900;color:#0f172a;">₹${c.amount}</div><div style="font-size:0.72rem;color:#94a3b8;">Amount</div></div>
+                  <div style="text-align:right;"><div style="font-size:0.875rem;font-weight:700;color:${expired ? '#ef4444' : '#10b981'};">${c.date_end || 'No end date'}</div><div style="font-size:0.72rem;color:#94a3b8;">Expiry</div></div>
+                </div>
+                <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid rgba(220,38,38,0.1);font-size:0.75rem;color:#64748b;">Started: ${c.date_start}</div>
+              </div>`;
+            })() : '<div style="text-align:center;padding:1.5rem 0;color:#94a3b8;"><i class="fas fa-file-contract" style="font-size:1.5rem;opacity:0.4;display:block;margin-bottom:0.5rem;"></i>No active membership</div>'}
+            <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+              <button onclick="confirmDelete()" class="btn-outline-sm" style="color:#ef4444;border-color:#ef4444;"><i class="fas fa-trash-alt"></i> Delete Member</button>
+              ${photoUrl ? `<button onclick="deletePhoto()" class="btn-outline-sm" style="color:#f59e0b;border-color:#f59e0b;"><i class="fas fa-image"></i> Remove Photo</button>` : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header-plain"><h6><i class="fas fa-chart-bar" style="color:#10b981;margin-right:8px;"></i>Stats</h6></div>
+          <div class="card-body-pad" style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+            <div style="background:#f8fafc;border-radius:10px;padding:0.85rem;text-align:center;"><div style="font-size:1.4rem;font-weight:800;color:#dc2626;">${attendance.length}</div><div style="font-size:0.7rem;color:#64748b;">Visits (30d)</div></div>
+            <div style="background:#f8fafc;border-radius:10px;padding:0.85rem;text-align:center;"><div style="font-size:1.4rem;font-weight:800;color:#f59e0b;">${contracts.length}</div><div style="font-size:0.7rem;color:#64748b;">Contracts</div></div>
+            <div style="background:#f8fafc;border-radius:10px;padding:0.85rem;text-align:center;grid-column:span 2;"><div style="font-size:1.4rem;font-weight:800;color:#ef4444;">${calcAge(member.birthdate) ?? '—'}</div><div style="font-size:0.7rem;color:#64748b;">Age</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-8">
+        <div class="card mb-3" style="margin-bottom:1rem;">
+          <div class="card-header-plain"><h6><i class="fas fa-fire" style="color:#ef4444;margin-right:8px;"></i>Attendance — Last 30 Days</h6></div>
+          <div class="card-body-pad">
+            <div style="display:flex;flex-wrap:wrap;gap:5px;">
+              ${dateRange.map((d) => {
+                const iso = d.toISOString().slice(0, 10);
+                return `<div class="heat-cell ${attByDate.has(iso) ? 'heat-2' : 'heat-0'}" title="${iso}">${d.getDate()}</div>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="border-bottom:1px solid #f1f5f9;display:flex;padding:0 1rem;">
+            <button class="tab-btn active" onclick="switchTab('attendance', this)"><i class="fas fa-clock" style="margin-right:4px;"></i>Attendance Log</button>
+            <button class="tab-btn" onclick="switchTab('contracts', this)"><i class="fas fa-file-contract" style="margin-right:4px;"></i>Contract History</button>
+            <button class="tab-btn" onclick="switchTab('notes', this)"><i class="fas fa-sticky-note" style="margin-right:4px;"></i>Notes</button>
+          </div>
+          <div id="tab-attendance" class="tab-panel active">
+            ${attendance.length ? `<table class="table-clean"><thead><tr><th>Date</th><th>Time In</th></tr></thead><tbody>
+              ${attendance.map((a) => `<tr><td>${a.date}</td><td>${a.time_in || '—'}</td></tr>`).join('')}
+            </tbody></table>` : '<div class="empty-state"><i class="fas fa-calendar-times"></i><p>No attendance in the last 30 days.</p></div>'}
+          </div>
+          <div id="tab-contracts" class="tab-panel">
+            ${contracts.length ? `<table class="table-clean"><thead><tr><th>Amount</th><th>Start</th><th>End</th></tr></thead><tbody>
+              ${contracts.map((c) => `<tr><td style="font-weight:700;color:#10b981;">₹${c.amount}</td><td>${c.date_start}</td><td>${c.date_end || 'No end'}</td></tr>`).join('')}
+            </tbody></table>` : '<div class="empty-state"><i class="fas fa-file-contract"></i><p>No contracts yet.</p></div>'}
+          </div>
+          <div id="tab-notes" class="tab-panel">
+            <div style="padding:1.25rem;">
+              ${contracts[0] && contracts[0].note ? `<div style="background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:1rem;font-size:0.875rem;color:#92400e;">${escapeHtml(contracts[0].note)}</div>` : '<div class="empty-state" style="padding:2rem 0;"><i class="fas fa-sticky-note"></i><p>No notes for this member.</p></div>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('photoInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      await fetch(`${API_BASE}/members/${memberId}/photo`, {
+        method: 'POST', body: formData,
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      load();
+    } catch (err) { alert(err.message); }
+  });
+
+  document.getElementById('deviceForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await api.post(`/members/${memberId}/set-device-id`, { device_user_id: document.getElementById('deviceIdInput').value });
+    load();
+  });
+}
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+async function deletePhoto() {
+  await api.del(`/members/${memberId}/photo`);
+  load();
+}
+
+function confirmDelete() {
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal-backdrop-custom" id="deleteModal">
+      <div class="modal-box">
+        <h3>Delete Member?</h3>
+        <p>This will permanently delete this member and all their data. This cannot be undone.</p>
+        <div class="modal-actions">
+          <button class="btn-outline-sm" onclick="document.getElementById('deleteModal').remove()">Cancel</button>
+          <button style="background:#ef4444;color:#fff;border:none;padding:0.45rem 1rem;border-radius:8px;font-weight:700;cursor:pointer;" onclick="doDelete()">Delete</button>
+        </div>
+      </div>
+    </div>
+  `);
+}
+async function doDelete() {
+  await api.del(`/members/${memberId}`);
+  window.location.href = '/members.html';
+}
+
+function load() {
+  Promise.all([
+    api.get(`/members/${memberId}`),
+    api.get(`/members/${memberId}/contracts`),
+    api.get('/members'),
+    api.get('/attendance'),
+  ]).then(([member, contracts, all, allAttendance]) => {
+    const found = all.find((m) => String(m.id) === String(memberId));
+    const since = new Date(); since.setDate(since.getDate() - 30);
+    const sinceIso = since.toISOString().slice(0, 10);
+    const myAttendance = allAttendance.filter((a) => a.member_id === Number(memberId) && a.date >= sinceIso);
+    render(member, contracts, found ? found.status : 'inactive', myAttendance);
+  }).catch((err) => { document.getElementById('pageBody').innerHTML = `<p class="error">${err.message}</p>`; });
+}
+
+load();
+</script>
+</body>
+</html>
