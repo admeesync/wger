@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from db.session import Base, engine
 from middleware.cors import setup_cors
 from routes import attendance, auth, contracts, dashboard, devices, inquiries, license_keys, member_photos, members, plans, profile
+import os
 from settings.settings import settings
 
 import models  # noqa: F401  registers all models on Base before create_all
@@ -12,6 +13,8 @@ app = FastAPI(title='wger-lite API')
 
 setup_cors(app)
 Base.metadata.create_all(bind=engine)
+
+os.makedirs(settings.upload_dir, exist_ok=True)
 app.mount('/uploads', StaticFiles(directory=settings.upload_dir), name='uploads')
 
 app.include_router(auth.router, prefix='/api')
