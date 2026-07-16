@@ -9,8 +9,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import models  # noqa: E402,F401
 from db.session import Base  # noqa: E402
+from settings.settings import settings
 
 config = context.config
+db_url = settings.database_url
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+config.set_main_option('sqlalchemy.url', db_url)
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
