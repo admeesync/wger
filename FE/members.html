@@ -28,7 +28,7 @@ function rowHtml(m) {
     ? '<span class="badge-expiring"><i class="fas fa-exclamation-circle" style="margin-right:4px;"></i>Expiring</span>'
     : '<span class="badge-inactive"><i class="fas fa-circle" style="font-size:0.5rem;margin-right:4px;"></i>Inactive</span>';
   const avatar = m.photo_url
-    ? `<div class="member-avatar" style="background:none;padding:0;overflow:hidden;"><img src="${API_BASE.replace('/api','')}${m.photo_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>`
+    ? `<div class="member-avatar" style="background:none;padding:0;overflow:hidden;"><img src="${m.photo_url.startsWith('http') ? m.photo_url : API_BASE.replace('/api','') + m.photo_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>`
     : `<div class="member-avatar">${m.username.slice(0,2).toUpperCase()}</div>`;
   return `
     <tr>

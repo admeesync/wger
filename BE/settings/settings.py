@@ -9,7 +9,13 @@ class Settings(BaseSettings):
     upload_dir: str = 'uploads'
     allowed_origins: str = '*'  # comma-separated list of FE origins allowed to call this API
 
+    # Supabase Storage settings
+    supabase_url: str | None = None
+    supabase_key: str | None = None
+    supabase_bucket_name: str | None = None
+
     class Config:
+
         env_file = '.env'
 
 

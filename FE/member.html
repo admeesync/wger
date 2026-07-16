@@ -61,7 +61,7 @@ function calcAge(birthdate) {
 async function render(member, contracts, status, attendance) {
   const initials = member.username.slice(0, 2).toUpperCase();
   let photoUrl = null;
-  try { const s = await api.get(`/members/${memberId}/photo/status`); photoUrl = s.has_photo ? BASE_ORIGIN + s.url : null; } catch (e) { /* ignore */ }
+  try { const s = await api.get(`/members/${memberId}/photo/status`); photoUrl = s.has_photo ? (s.url.startsWith('http') ? s.url : BASE_ORIGIN + s.url) : null; } catch (e) { /* ignore */ }
 
   const statusBadge = status === 'active'
     ? '<span class="badge-active"><i class="fas fa-circle" style="font-size:0.45rem;margin-right:4px;"></i>Active</span>'

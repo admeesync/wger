@@ -12,8 +12,10 @@ from schema.user import BirthdayOut, MemberCreate, MemberCreated, MemberStatus, 
 from service.gym_service import contract_status
 from utils.security import hash_password
 from utils.passwords import generate_password
+from utils.storage import storage_service
 
 router = APIRouter(prefix='/members', tags=['members'])
+
 
 
 def _get_member_in_gym(db: Session, member_id: int, gym_id: int) -> User:
@@ -40,7 +42,7 @@ def list_members(db: Session = Depends(get_db), staff: User = Depends(require_gy
             contract_end=c.date_end if c else None,
             contract_amount=str(c.amount) if c else None,
             date_joined=m.date_joined,
-            photo_url=f'/uploads/{photo.file_path}' if photo else None,
+            photo_url=storage_service.get_file_url(photo.file_path) if photo else None,
         ))
     return result
 
