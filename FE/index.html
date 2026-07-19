@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — wger</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.6.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<script src="/js/config.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+renderLayout('dashboard', 'Dashboard');
+
+function statCard(icon, color, value, label, href) {
+  const inner = `
+    <div class="stat-card" style="${href ? 'cursor:pointer;' : ''}">
+      <div class="stat-icon ${color}"><i class="fas ${icon}"></i></div>
+      <div><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>
+    </div>`;
+  return href ? `<a href="${href}" style="text-decoration:none;">${inner}</a>` : inner;
+}
+
+api.get('/auth/me').then((user) => {
+  api.get('/dashboard/summary').then((data) => {
+    document.getElementById('pageBody').innerHTML = `
+      <div style="margin-bottom:1.5rem;">
+        <div style="font-size:1.3rem;font-weight:800;color:#0f172a;">Welcome back, ${escapeHtml(user.username)} 👋</div>
+        <div style="color:#64748b;font-size:0.82rem;">Here's what's happening at your gym today.</div>
+      </div>
+      <div class="row g-3 mb-4">
+        <div class="col-12 col-sm-6 col-xl-4">${statCard('fa-users', 'purple', data.total_members, 'Total Members')}</div>
+        <div class="col-12 col-sm-6 col-xl-4">${statCard('fa-fingerprint', 'green', data.today_attendance, "Today's Check-ins")}</div>
+        <div class="col-12 col-sm-6 col-xl-4">${statCard('fa-exclamation-triangle', 'orange', data.expiring_soon, 'Expiring in 30 days')}</div>
+        <div class="col-12 col-sm-6 col-xl-4">${statCard('fa-rupee-sign', 'blue', '₹' + Math.round(data.monthly_revenue), 'Active Revenue')}</div>
+        <div class="col-12 col-sm-6 col-xl-4">${statCard('fa-birthday-cake', 'pink', data.birthday_count, 'Birthdays Today', '/birthdays.html')}</div>
+        <div class="col-12 col-sm-6 col-xl-4">${statCard('fa-user-plus', 'green', data.new_members_this_month, 'New Members This Month')}</div>
+      </div>
+      <div class="row g-3 mb-4">
+        <div class="col-12 col-lg-8">
+          <div class="card">
+            <div class="card-header-plain"><h6><i class="fas fa-chart-bar" style="color:#dc2626;margin-right:8px;"></i>Weekly Attendance</h6><span style="font-size:0.75rem;color:#64748b;">Last 7 days</span></div>
+            <div class="card-body-pad"><canvas id="attendanceChart" height="100"></canvas></div>
+          </div>
+        </div>
+        <div class="col-12 col-lg-4">
+          <div class="card">
+            <div class="card-header-plain"><h6><i class="fas fa-chart-line" style="color:#10b981;margin-right:8px;"></i>Revenue Trend</h6><span style="font-size:0.75rem;color:#64748b;">Last 6 months</span></div>
+            <div class="card-body-pad"><canvas id="revenueChart" height="180"></canvas></div>
+          </div>
+        </div>
+      </div>
+      <div class="row g-3">
+        <div class="col-12 col-lg-6">
+          <div class="card">
+            <div class="card-header-plain"><h6><i class="fas fa-user-plus" style="color:#dc2626;margin-right:8px;"></i>Recent Members</h6><a href="/members.html" class="btn-outline-sm" style="font-size:0.75rem;padding:0.3rem 0.7rem;">View all</a></div>
+            ${data.recent_members.length ? `
+              <table class="table-clean"><thead><tr><th>Member</th><th>Joined</th><th></th></tr></thead><tbody>
+                ${data.recent_members.map((m) => `
+                  <tr>
+                    <td><div style="display:flex;align-items:center;gap:10px;">
+                      <div class="member-avatar">${m.username.slice(0,2).toUpperCase()}</div>
+                      <div><div style="font-weight:600;font-size:0.85rem;">${escapeHtml(m.first_name ? (m.first_name + ' ' + (m.last_name || '')).trim() : m.username)}</div><div style="color:#94a3b8;font-size:0.75rem;">${escapeHtml(m.email)}</div></div>
+                    </div></td>
+                    <td style="color:#64748b;font-size:0.8rem;">${m.date_joined}</td>
+                    <td><a href="/member.html?id=${m.id}" class="btn-outline-sm" style="padding:0.25rem 0.6rem;font-size:0.75rem;">View</a></td>
+                  </tr>`).join('')}
+              </tbody></table>` : '<div class="empty-state"><i class="fas fa-users"></i><p>No members yet.</p></div>'}
+          </div>
+        </div>
+        <div class="col-12 col-lg-6">
+          <div class="card">
+            <div class="card-header-plain"><h6><i class="fas fa-clock" style="color:#10b981;margin-right:8px;"></i>Recent Check-ins</h6><a href="/attendance.html" class="btn-outline-sm" style="font-size:0.75rem;padding:0.3rem 0.7rem;">View all</a></div>
+            ${data.recent_attendance.length ? `
+              <table class="table-clean"><thead><tr><th>Member</th><th>Date</th><th>In</th></tr></thead><tbody>
+                ${data.recent_attendance.map((rec) => `
+                  <tr>
+                    <td><div style="display:flex;align-items:center;gap:8px;">
+                      <div class="member-avatar" style="width:28px;height:28px;font-size:0.68rem;">${rec.member_username.slice(0,2).toUpperCase()}</div>
+                      ${escapeHtml(rec.member_username)}
+                    </div></td>
+                    <td style="color:#64748b;font-size:0.8rem;">${rec.date}</td>
+                    <td style="font-size:0.8rem;">${rec.time_in || '—'}</td>
+                  </tr>`).join('')}
+              </tbody></table>` : '<div class="empty-state"><i class="fas fa-fingerprint"></i><p>No attendance records yet.</p></div>'}
+          </div>
+        </div>
+      </div>
+    `;
+
+    new Chart(document.getElementById('attendanceChart'), {
+      type: 'bar',
+      data: { labels: data.week_labels, datasets: [{ label: 'Check-ins', data: data.week_data, backgroundColor: 'rgba(220,38,38,0.15)', borderColor: '#dc2626', borderWidth: 2, borderRadius: 8, borderSkipped: false }] },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' }, border: { display: false } }, x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
+    });
+    new Chart(document.getElementById('revenueChart'), {
+      type: 'line',
+      data: { labels: data.month_labels, datasets: [{ label: 'Revenue (₹)', data: data.month_data, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', borderWidth: 2.5, fill: true, tension: 0.4, pointBackgroundColor: '#10b981', pointRadius: 4 }] },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#f1f5f9' }, border: { display: false } }, x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false }, border: { display: false } } } },
+    });
+  }).catch((err) => { document.getElementById('pageBody').innerHTML = `<p class="error">${err.message}</p>`; });
+});
+</script>
+</body>
+</html>

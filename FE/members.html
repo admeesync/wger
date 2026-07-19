@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Members — wger</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.6.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+<script src="/js/config.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+renderLayout('members', 'Members');
+
+let allMembers = [];
+let search = '';
+let statusFilter = '';
+let folder = 'all';
+
+const FOLDERS = [
+  ['all', 'All', 'fa-folder-open'],
+  ['owner', 'Owner', 'fa-crown'],
+  ['trainer', 'Trainer', 'fa-dumbbell'],
+  ['member', 'Member', 'fa-user'],
+  ['staff', 'Staff', 'fa-user-tie'],
+  ['date', 'By Date', 'fa-calendar'],
+  ['fee', 'By Fee', 'fa-rupee-sign'],
+];
+
+const TYPE_BADGE = {
+  owner: '<span style="background:rgba(245,158,11,0.12);color:#b45309;padding:1px 7px;border-radius:5px;font-size:0.68rem;font-weight:700;">OWNER</span>',
+  trainer: '<span style="background:rgba(59,130,246,0.12);color:#1d4ed8;padding:1px 7px;border-radius:5px;font-size:0.68rem;font-weight:700;">TRAINER</span>',
+  staff: '<span style="background:rgba(100,116,139,0.12);color:#475569;padding:1px 7px;border-radius:5px;font-size:0.68rem;font-weight:700;">STAFF</span>',
+  member: '',
+};
+
+function rowHtml(m) {
+  const statusBadge = m.status === 'active'
+    ? '<span class="badge-active"><i class="fas fa-circle" style="font-size:0.5rem;margin-right:4px;"></i>Active</span>'
+    : m.status === 'expiring'
+    ? '<span class="badge-expiring"><i class="fas fa-exclamation-circle" style="margin-right:4px;"></i>Expiring</span>'
+    : '<span class="badge-inactive"><i class="fas fa-circle" style="font-size:0.5rem;margin-right:4px;"></i>Inactive</span>';
+  const avatar = m.photo_url
+    ? `<div class="member-avatar" style="background:none;padding:0;overflow:hidden;"><img src="${m.photo_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>`
+    : `<div class="member-avatar">${m.username.slice(0,2).toUpperCase()}</div>`;
+  return `
+    <tr>
+      <td><div style="display:flex;align-items:center;gap:10px;">
+        ${avatar}
+        <div><div style="font-weight:600;font-size:0.875rem;color:#0f172a;">${escapeHtml(m.username)} ${TYPE_BADGE[m.member_type] || ''}</div><div style="color:#94a3b8;font-size:0.75rem;">${escapeHtml(m.email)}</div></div>
+      </div></td>
+      <td style="font-size:0.82rem;color:#475569;">@${escapeHtml(m.username)}</td>
+      <td style="font-size:0.82rem;font-weight:600;">${m.contract_amount ? '₹' + m.contract_amount : '—'}</td>
+      <td style="font-size:0.82rem;color:#64748b;">${m.contract_end || '—'}</td>
+      <td>${m.member_type === 'member' ? statusBadge : '<span style="color:#cbd5e1;">—</span>'}</td>
+      <td><div style="display:flex;gap:0.4rem;">
+        <a href="/member.html?id=${m.id}" class="btn-outline-sm" style="padding:0.3rem 0.65rem;font-size:0.75rem;"><i class="fas fa-eye"></i></a>
+        <button class="btn-outline-sm" style="padding:0.3rem 0.65rem;font-size:0.75rem;color:#ef4444;border-color:#ef4444;" onclick="openDeleteModal(${m.id}, '${escapeHtml(m.username)}')"><i class="fas fa-trash-alt"></i></button>
+      </div></td>
+    </tr>`;
+}
+
+function tableHtml(rows) {
+  return rows.length ? `
+    <div style="overflow-x:auto;"><table class="table-clean">
+      <thead><tr><th>Member</th><th>Username</th><th>Fee</th><th>Expiry</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${rows.map(rowHtml).join('')}</tbody>
+    </table></div>` : '<div class="empty-state"><i class="fas fa-users"></i><p>No members found.</p></div>';
+}
+
+function bodyForFolder(searched) {
+  if (folder === 'date') {
+    const groups = {};
+    [...searched].sort((a, b) => b.date_joined.localeCompare(a.date_joined)).forEach((m) => {
+      const key = m.date_joined.slice(0, 7); // YYYY-MM
+      (groups[key] = groups[key] || []).push(m);
+    });
+    return Object.keys(groups).sort().reverse().map((key) => `
+      <div class="card mb-3" style="margin-bottom:1rem;">
+        <div class="card-header-plain"><h6><i class="fas fa-calendar" style="color:#dc2626;margin-right:8px;"></i>${new Date(key + '-02').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h6></div>
+        ${tableHtml(groups[key])}
+      </div>`).join('');
+  }
+  if (folder === 'fee') {
+    const members = searched.filter((m) => m.member_type === 'member');
+    const groups = {};
+    members.forEach((m) => {
+      const key = m.plan_name || 'No Plan';
+      (groups[key] = groups[key] || []).push(m);
+    });
+    return Object.keys(groups).sort().map((key) => `
+      <div class="card mb-3" style="margin-bottom:1rem;">
+        <div class="card-header-plain"><h6><i class="fas fa-rupee-sign" style="color:#dc2626;margin-right:8px;"></i>${escapeHtml(key)}</h6></div>
+        ${tableHtml(groups[key])}
+      </div>`).join('');
+  }
+  return `<div class="card">${tableHtml(searched)}</div>`;
+}
+
+function render() {
+  const searched = allMembers.filter((m) => {
+    const q = search.toLowerCase();
+    const matchesSearch = !q || m.username.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+    const matchesStatus = !statusFilter || m.status === statusFilter;
+    const matchesFolder = folder === 'all' || folder === 'date' || folder === 'fee' || m.member_type === folder;
+    return matchesSearch && matchesStatus && matchesFolder;
+  });
+  const activeCount = allMembers.filter((m) => m.status === 'active' && m.member_type === 'member').length;
+  const folderCount = (key) => key === 'all' ? allMembers.length : key === 'date' || key === 'fee' ? null : allMembers.filter((m) => m.member_type === key).length;
+
+  document.getElementById('pageBody').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:1rem;">
+      <div>
+        <div style="font-size:1.3rem;font-weight:800;color:#0f172a;">Member List</div>
+        <div style="color:#64748b;font-size:0.82rem;">${searched.length} shown</div>
+      </div>
+      <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+        <div class="search-wrap"><i class="fas fa-search"></i><input class="search-input" id="searchInput" placeholder="Search member..." value="${escapeHtml(search)}"></div>
+        <select id="statusSelect" style="width:auto;">
+          <option value="">All Status</option>
+          <option value="active" ${statusFilter === 'active' ? 'selected' : ''}>Active</option>
+          <option value="expiring" ${statusFilter === 'expiring' ? 'selected' : ''}>Expiring</option>
+          <option value="inactive" ${statusFilter === 'inactive' ? 'selected' : ''}>Inactive</option>
+        </select>
+        <button class="btn-outline-sm" onclick="exportMembers()"><i class="fas fa-download"></i> Export</button>
+        <button class="btn-primary-sm" onclick="openAddModal()"><i class="fas fa-plus"></i> Add Member</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1.25rem;">
+      ${FOLDERS.map(([key, label, icon]) => `
+        <button class="folder-tab ${folder === key ? 'folder-tab-active' : ''}" onclick="setFolder('${key}')">
+          <i class="fas ${icon}"></i> ${label}${folderCount(key) !== null ? ` <span class="folder-tab-count">${folderCount(key)}</span>` : ''}
+        </button>
+      `).join('')}
+    </div>
+    <div class="row g-3 mb-4">
+      <div class="col-12 col-sm-6 col-xl-3"><div class="stat-card" style="padding:1rem;"><div class="stat-icon purple" style="width:40px;height:40px;font-size:1rem;"><i class="fas fa-users"></i></div><div><div class="stat-value" style="font-size:1.3rem;">${searched.length}</div><div class="stat-label">Total Shown</div></div></div></div>
+      <div class="col-12 col-sm-6 col-xl-3"><div class="stat-card" style="padding:1rem;"><div class="stat-icon green" style="width:40px;height:40px;font-size:1rem;"><i class="fas fa-check-circle"></i></div><div><div class="stat-value" style="font-size:1.3rem;">${activeCount}</div><div class="stat-label">Active</div></div></div></div>
+    </div>
+    <p class="error" id="error" style="display:none;"></p>
+    ${bodyForFolder(searched)}
+  `;
+
+  document.getElementById('searchInput').addEventListener('input', (e) => { search = e.target.value; render(); });
+  document.getElementById('statusSelect').addEventListener('change', (e) => { statusFilter = e.target.value; render(); });
+}
+
+function setFolder(key) { folder = key; render(); }
+
+function load() {
+  api.get('/members').then((data) => { allMembers = data; render(); })
+    .catch((err) => { document.getElementById('pageBody').innerHTML = `<p class="error">${err.message}</p>`; });
+}
+
+async function exportMembers() {
+  const res = await fetch(`${API_BASE}/members/export`, {
+    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+  });
+  if (!res.ok) { alert('Failed to export members.'); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'members.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function openAddModal() {
+  let plans = [];
+  try { plans = (await api.get('/plans')).filter((p) => p.is_active); } catch (e) { /* ignore */ }
+  const today = new Date().toISOString().slice(0, 10);
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal-backdrop-custom" id="addModal">
+      <div class="modal-box" style="max-width:640px;max-height:90vh;overflow-y:auto;">
+        <h3><i class="fas fa-user-plus" style="color:#dc2626;margin-right:8px;"></i>Add Person</h3>
+        <form id="addForm">
+          <div style="margin-bottom:0.75rem;">
+            <label class="form-label">Type *</label>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+              ${[['member', 'Member', 'fa-user'], ['trainer', 'Trainer', 'fa-dumbbell'], ['owner', 'Owner', 'fa-crown'], ['staff', 'Staff', 'fa-user-tie']].map(([val, label, icon]) => `
+                <label style="cursor:pointer;">
+                  <input type="radio" name="typeRadio" value="${val}" style="display:none;" class="type-radio" ${val === 'member' ? 'checked' : ''}>
+                  <div class="type-card-sel" data-type="${val}" style="border:1.5px solid ${val === 'member' ? '#dc2626' : '#e2e8f0'};background:${val === 'member' ? 'rgba(220,38,38,0.05)' : ''};border-radius:10px;padding:0.5rem 0.85rem;font-size:0.8rem;font-weight:600;">
+                    <i class="fas ${icon}" style="margin-right:5px;"></i>${label}
+                  </div>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+          <div style="display:flex;gap:0.75rem;margin-bottom:0.75rem;">
+            <div style="flex:1;"><label class="form-label">First Name *</label><input id="addFirstName" required></div>
+            <div style="flex:1;"><label class="form-label">Last Name</label><input id="addLastName"></div>
+          </div>
+          <div style="margin-bottom:0.75rem;"><label class="form-label">Username *</label><input id="addUsername" required></div>
+          <div style="margin-bottom:0.75rem;"><label class="form-label">Email *</label><input id="addEmail" type="email" required></div>
+          <div style="display:flex;gap:0.75rem;margin-bottom:0.75rem;">
+            <div style="flex:1;"><label class="form-label">Phone</label><input id="addPhone" type="tel"></div>
+            <div style="flex:1;"><label class="form-label">Gender</label>
+              <select id="addGender"><option value="1">Male</option><option value="2">Female</option></select>
+            </div>
+            <div style="flex:1;"><label class="form-label">Date of Birth</label><input id="addBirthdate" type="date"></div>
+          </div>
+
+          <div id="membershipSection" style="border-top:1px solid #f1f5f9;margin:1rem 0 0.75rem;padding-top:0.75rem;">
+            <label class="form-label">Membership Plan (optional)</label>
+            ${plans.length ? `
+              <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.75rem;">
+                ${plans.map((p) => `
+                  <label style="cursor:pointer;">
+                    <input type="radio" name="planRadio" value="${p.id}" data-price="${p.price}" data-days="${p.duration_days}" style="display:none;" class="plan-radio">
+                    <div class="plan-card-sel" style="border:1.5px solid #e2e8f0;border-radius:10px;padding:0.6rem 0.85rem;font-size:0.8rem;">
+                      <strong>${escapeHtml(p.name)}</strong> — ₹${p.price} / ${p.duration_days}d
+                    </div>
+                  </label>
+                `).join('')}
+              </div>` : '<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem;">No active plans — create one from Membership Plans.</div>'}
+            <div style="display:flex;gap:0.75rem;">
+              <div style="flex:1;"><label class="form-label">Start Date</label><input id="addDateStart" type="date" value="${today}"></div>
+              <div style="flex:1;"><label class="form-label">End Date</label><input id="addDateEnd" type="date"></div>
+              <div style="flex:1;"><label class="form-label">Fee (₹)</label><input id="addFee" type="number" step="0.01" placeholder="uses plan price"></div>
+            </div>
+            <div style="margin-top:0.75rem;"><label class="form-label">Notes</label><textarea id="addNotes" rows="2"></textarea></div>
+          </div>
+
+          <p class="error" id="addError" style="display:none;margin-top:0.75rem;"></p>
+          <div class="modal-actions">
+            <button type="button" class="btn-outline-sm" onclick="document.getElementById('addModal').remove()">Cancel</button>
+            <button type="submit" class="btn-primary-sm">Add</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `);
+  document.getElementById('addModal').addEventListener('click', (e) => { if (e.target.id === 'addModal') e.target.remove(); });
+  document.querySelectorAll('.type-radio').forEach((radio) => {
+    radio.addEventListener('change', function () {
+      document.querySelectorAll('.type-card-sel').forEach((c) => { c.style.borderColor = '#e2e8f0'; c.style.background = ''; });
+      const card = this.nextElementSibling;
+      card.style.borderColor = '#dc2626';
+      card.style.background = 'rgba(220,38,38,0.05)';
+      document.getElementById('membershipSection').style.display = this.value === 'member' ? '' : 'none';
+    });
+  });
+  document.querySelectorAll('.plan-radio').forEach((radio) => {
+    radio.addEventListener('change', function () {
+      document.querySelectorAll('.plan-card-sel').forEach((c) => { c.style.borderColor = '#e2e8f0'; c.style.background = ''; });
+      this.nextElementSibling.style.borderColor = '#dc2626';
+      this.nextElementSibling.style.background = 'rgba(220,38,38,0.05)';
+      const feeInput = document.getElementById('addFee');
+      if (!feeInput.value) feeInput.value = this.dataset.price;
+      const start = document.getElementById('addDateStart').value;
+      if (start) {
+        const d = new Date(start);
+        d.setDate(d.getDate() + Number(this.dataset.days));
+        document.getElementById('addDateEnd').value = d.toISOString().slice(0, 10);
+      }
+    });
+  });
+  document.getElementById('addForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('addError');
+    const selectedPlan = document.querySelector('.plan-radio:checked');
+    const memberType = document.querySelector('.type-radio:checked').value;
+    try {
+      const result = await api.post('/members', {
+        member_type: memberType,
+        first_name: document.getElementById('addFirstName').value,
+        last_name: document.getElementById('addLastName').value,
+        username: document.getElementById('addUsername').value,
+        email: document.getElementById('addEmail').value,
+        phone: document.getElementById('addPhone').value,
+        gender: document.getElementById('addGender').value,
+        birthdate: document.getElementById('addBirthdate').value || null,
+        plan_id: selectedPlan ? Number(selectedPlan.value) : null,
+        date_start: document.getElementById('addDateStart').value || null,
+        date_end: document.getElementById('addDateEnd').value || null,
+        fee_amount: document.getElementById('addFee').value || null,
+        notes: document.getElementById('addNotes').value,
+      });
+      document.querySelector('#addModal .modal-box').innerHTML = `
+        <h3>Added</h3>
+        <p><strong>${escapeHtml(result.username)}</strong> has been added.</p>
+        <div class="modal-actions"><button class="btn-primary-sm" onclick="document.getElementById('addModal').remove();load();">Done</button></div>
+      `;
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    }
+  });
+}
+
+function openDeleteModal(id, username) {
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal-backdrop-custom" id="deleteModal">
+      <div class="modal-box">
+        <h3>Delete Member?</h3>
+        <p>Permanently delete ${escapeHtml(username)} and all their data? This cannot be undone.</p>
+        <div class="modal-actions">
+          <button class="btn-outline-sm" onclick="document.getElementById('deleteModal').remove()">Cancel</button>
+          <button class="btn-danger-sm" style="background:#ef4444;color:#fff;padding:0.45rem 1rem;font-weight:700;" onclick="confirmDelete(${id})"><i class="fas fa-trash-alt" style="margin-right:6px;"></i>Confirm</button>
+        </div>
+      </div>
+    </div>
+  `);
+  document.getElementById('deleteModal').addEventListener('click', (e) => { if (e.target.id === 'deleteModal') e.target.remove(); });
+}
+
+async function confirmDelete(id) {
+  await api.del(`/members/${id}`);
+  document.getElementById('deleteModal').remove();
+  load();
+}
+
+load();
+if (new URLSearchParams(window.location.search).get('add') === '1') openAddModal();
+</script>
+</body>
+</html>

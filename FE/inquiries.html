@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inquiries & Leads — wger</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.6.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+<script src="/js/config.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+renderLayout('inquiries', 'Inquiries & Leads');
+const STATUS_LABELS = { new: 'New', contacted: 'Contacted', converted: 'Converted', not_interested: 'Not Interested' };
+const TAG_META = {
+  hot: { label: 'Hot', icon: 'fa-fire', color: '#dc2626', bg: 'rgba(220,38,38,0.1)' },
+  cool: { label: 'Cool', icon: 'fa-snowflake', color: '#2563eb', bg: 'rgba(37,99,235,0.1)' },
+  normal: { label: 'Normal', icon: 'fa-circle', color: '#64748b', bg: 'rgba(100,116,139,0.1)' },
+};
+let tagFilter = '';
+let allInquiries = [];
+
+function statusBadge(status) {
+  if (status === 'new') return '<span class="badge-active" style="background:rgba(59,130,246,0.1);color:#1d4ed8;"><i class="fas fa-circle" style="font-size:0.45rem;margin-right:4px;"></i>New</span>';
+  if (status === 'contacted') return '<span class="badge-expiring"><i class="fas fa-phone" style="margin-right:4px;"></i>Contacted</span>';
+  if (status === 'converted') return '<span class="badge-active"><i class="fas fa-check" style="margin-right:4px;"></i>Converted</span>';
+  return '<span class="badge-inactive"><i class="fas fa-times" style="margin-right:4px;"></i>Not Interested</span>';
+}
+
+function tagBadge(inq) {
+  const t = TAG_META[inq.tag];
+  const autoLabel = inq.tag_override ? '' : ' (auto)';
+  return `<span title="${t.label}${autoLabel}" style="cursor:pointer;background:${t.bg};color:${t.color};padding:0.2rem 0.6rem;border-radius:6px;font-size:0.72rem;font-weight:700;display:inline-flex;align-items:center;gap:5px;" onclick="toggleTagMenu(${inq.id}, this)"><i class="fas ${t.icon}"></i>${t.label}<i class="fas fa-caret-down" style="font-size:0.6rem;opacity:0.6;"></i></span>`;
+}
+
+function setFolder(f) { tagFilter = f; render(allInquiries); }
+
+function render(inquiries) {
+  allInquiries = inquiries;
+  const today = new Date().toISOString().slice(0, 10);
+  const todayCount = inquiries.filter((i) => i.visit_date === today).length;
+  const convertedCount = inquiries.filter((i) => i.status === 'converted').length;
+  const shown = tagFilter ? inquiries.filter((i) => i.tag === tagFilter) : inquiries;
+  const tagCount = (tag) => inquiries.filter((i) => i.tag === tag).length;
+
+  document.getElementById('pageBody').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
+      <div><div style="font-size:1.3rem;font-weight:800;color:#0f172a;">Inquiries & Leads</div><div style="color:#64748b;font-size:0.82rem;">Track walk-ins and potential members</div></div>
+      <button class="btn-primary-sm" onclick="openAddModal()"><i class="fas fa-plus"></i> Add Inquiry</button>
+    </div>
+    <div class="row g-3 mb-4">
+      <div class="col-12 col-sm-6 col-xl-4"><div class="stat-card" style="padding:1rem;"><div class="stat-icon red" style="width:40px;height:40px;font-size:1rem;"><i class="fas fa-calendar-day"></i></div><div><div class="stat-value" style="font-size:1.3rem;">${todayCount}</div><div class="stat-label">Today's Inquiries</div></div></div></div>
+      <div class="col-12 col-sm-6 col-xl-4"><div class="stat-card" style="padding:1rem;"><div class="stat-icon blue" style="width:40px;height:40px;font-size:1rem;"><i class="fas fa-user-clock"></i></div><div><div class="stat-value" style="font-size:1.3rem;">${inquiries.length}</div><div class="stat-label">Total Inquiries</div></div></div></div>
+      <div class="col-12 col-sm-6 col-xl-4"><div class="stat-card" style="padding:1rem;"><div class="stat-icon green" style="width:40px;height:40px;font-size:1rem;"><i class="fas fa-user-check"></i></div><div><div class="stat-value" style="font-size:1.3rem;">${convertedCount}</div><div class="stat-label">Converted</div></div></div></div>
+    </div>
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1.25rem;">
+      <button class="folder-tab ${!tagFilter ? 'folder-tab-active' : ''}" onclick="setFolder('')"><i class="fas fa-layer-group"></i> All <span class="folder-tab-count">${inquiries.length}</span></button>
+      ${Object.entries(TAG_META).map(([key, t]) => `
+        <button class="folder-tab ${tagFilter === key ? 'folder-tab-active' : ''}" onclick="setFolder('${key}')"><i class="fas ${t.icon}" style="color:${t.color};"></i> ${t.label} <span class="folder-tab-count">${tagCount(key)}</span></button>
+      `).join('')}
+    </div>
+    <p class="error" id="error" style="display:none;"></p>
+    <div class="card">
+      ${shown.length ? `<div style="overflow-x:auto;"><table class="table-clean">
+        <thead><tr><th>Name</th><th>Contact</th><th>Plan Interest</th><th>Visit Date</th><th>Lead</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead>
+        <tbody>${shown.map((inq) => `
+          <tr>
+            <td>
+              <div style="font-weight:600;font-size:0.875rem;color:#0f172a;">${escapeHtml(inq.name)}</div>
+              ${inq.added_by_name ? `<div style="font-size:0.7rem;color:#94a3b8;">Added by ${escapeHtml(inq.added_by_name)}</div>` : ''}
+            </td>
+            <td style="font-size:0.82rem;color:#475569;">
+              ${inq.phone ? `<div><i class="fas fa-phone" style="width:14px;color:#94a3b8;"></i> ${escapeHtml(inq.phone)}</div>` : ''}
+              ${inq.email ? `<div><i class="fas fa-envelope" style="width:14px;color:#94a3b8;"></i> ${escapeHtml(inq.email)}</div>` : ''}
+              ${!inq.phone && !inq.email ? '—' : ''}
+            </td>
+            <td style="font-size:0.82rem;">${inq.plan ? `<span style="background:rgba(220,38,38,0.08);color:#dc2626;padding:0.2rem 0.55rem;border-radius:6px;font-size:0.75rem;font-weight:600;">${escapeHtml(inq.plan.name)}</span>` : '<span style="color:#cbd5e1;">—</span>'}</td>
+            <td style="font-size:0.82rem;color:#64748b;">${inq.visit_date || '—'}</td>
+            <td><div style="position:relative;">
+              ${tagBadge(inq)}
+              <div id="tagmenu-${inq.id}" style="display:none;position:fixed;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:1000;min-width:150px;overflow:hidden;">
+                ${Object.entries(TAG_META).map(([key, t]) => `<button style="width:100%;background:none;border:none;padding:0.5rem 0.85rem;font-size:0.78rem;color:${t.color};text-align:left;cursor:pointer;display:flex;align-items:center;gap:6px;" onclick="setTag(${inq.id}, '${key}')"><i class="fas ${t.icon}"></i>${t.label}</button>`).join('')}
+                <button style="width:100%;background:none;border:none;border-top:1px solid #f1f5f9;padding:0.5rem 0.85rem;font-size:0.75rem;color:#94a3b8;text-align:left;cursor:pointer;" onclick="setTag(${inq.id}, null)"><i class="fas fa-magic" style="margin-right:6px;"></i>Auto (by age)</button>
+              </div>
+            </div></td>
+            <td>${statusBadge(inq.status)}</td>
+            <td style="font-size:0.78rem;color:#64748b;max-width:160px;" title="${escapeHtml(inq.note)}">${escapeHtml(inq.note) || '—'}</td>
+            <td><div style="display:flex;gap:0.4rem;align-items:center;position:relative;">
+              <button class="btn-outline-sm" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="toggleStatusMenu(${inq.id}, this)"><i class="fas fa-exchange-alt"></i></button>
+              <div id="menu-${inq.id}" style="display:none;position:fixed;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:1000;min-width:140px;overflow:hidden;">
+                ${Object.entries(STATUS_LABELS).filter(([val]) => val !== inq.status).map(([val, label]) => `<button style="width:100%;background:none;border:none;padding:0.5rem 0.85rem;font-size:0.78rem;color:#374151;text-align:left;cursor:pointer;" onclick="setStatus(${inq.id}, '${val}')">${label}</button>`).join('')}
+              </div>
+              <button class="btn-outline-sm" style="padding:0.3rem 0.6rem;font-size:0.75rem;color:#ef4444;border-color:#ef4444;" onclick="openDeleteModal(${inq.id}, '${escapeHtml(inq.name)}')"><i class="fas fa-trash-alt"></i></button>
+            </div></td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>` : `<div class="empty-state"><i class="fas fa-user-clock"></i><p>No inquiries found.</p><button class="btn-primary-sm" style="margin-top:1rem;" onclick="openAddModal()"><i class="fas fa-plus"></i> Add First Inquiry</button></div>`}
+    </div>
+  `;
+}
+
+function load() {
+  api.get('/inquiries').then(render).catch((err) => { document.getElementById('pageBody').innerHTML = `<p class="error">${err.message}</p>`; });
+}
+
+function toggleTagMenu(id, badge) {
+  document.querySelectorAll('[id^="tagmenu-"], [id^="menu-"]').forEach((el) => { if (el.id !== `tagmenu-${id}`) el.style.display = 'none'; });
+  const menu = document.getElementById(`tagmenu-${id}`);
+  const opening = menu.style.display !== 'block';
+  if (opening) {
+    const rect = badge.getBoundingClientRect();
+    menu.style.display = 'block';
+    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.left = `${rect.left}px`;
+  } else {
+    menu.style.display = 'none';
+  }
+}
+
+async function setTag(id, tag) {
+  await api.post(`/inquiries/${id}/tag`, { tag });
+  load();
+}
+
+function toggleStatusMenu(id, btn) {
+  document.querySelectorAll('[id^="menu-"]').forEach((el) => { if (el.id !== `menu-${id}`) el.style.display = 'none'; });
+  const menu = document.getElementById(`menu-${id}`);
+  const opening = menu.style.display !== 'block';
+  if (opening) {
+    const rect = btn.getBoundingClientRect();
+    menu.style.display = 'block';
+    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.left = `${rect.right - menu.offsetWidth}px`;
+  } else {
+    menu.style.display = 'none';
+  }
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[id^="menu-"]') && !e.target.closest('.btn-outline-sm')) {
+    document.querySelectorAll('[id^="menu-"]').forEach((el) => el.style.display = 'none');
+  }
+  if (!e.target.closest('[id^="tagmenu-"]') && !e.target.closest('[onclick^="toggleTagMenu"]')) {
+    document.querySelectorAll('[id^="tagmenu-"]').forEach((el) => el.style.display = 'none');
+  }
+});
+
+async function setStatus(id, status) {
+  await api.post(`/inquiries/${id}/status`, { status });
+  load();
+}
+
+async function openAddModal() {
+  let plans = [];
+  try { plans = (await api.get('/plans')).filter((p) => p.is_active); } catch (e) { /* ignore */ }
+  const today = new Date().toISOString().slice(0, 10);
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal-backdrop-custom" id="addModal">
+      <div class="modal-box" style="max-width:480px;">
+        <div style="text-align:center;margin-bottom:1.25rem;">
+          <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#dc2626,#991b1b);display:flex;align-items:center;justify-content:center;margin:0 auto 0.75rem;box-shadow:0 8px 20px rgba(220,38,38,0.3);">
+            <i class="fas fa-user-plus" style="color:#fff;font-size:1.3rem;"></i>
+          </div>
+          <h3 style="margin-bottom:0.2rem;">New Inquiry</h3>
+          <p style="margin-bottom:0;">A fresh lead starts out tagged <span style="color:#dc2626;font-weight:700;"><i class="fas fa-fire"></i> Hot</span></p>
+        </div>
+        <form id="addForm">
+          <div style="background:#f8fafc;border-radius:12px;padding:1rem;margin-bottom:0.85rem;">
+            <div style="margin-bottom:0.75rem;"><label class="form-label">Full Name *</label><input id="iName" required placeholder="e.g. Priya Sharma"></div>
+            <div style="display:flex;gap:0.75rem;">
+              <div style="flex:1;"><label class="form-label">Phone Number</label><input id="iPhone" type="tel" placeholder="10-digit number"></div>
+              <div style="flex:1;"><label class="form-label">Email</label><input id="iEmail" type="email" placeholder="optional"></div>
+            </div>
+          </div>
+          <div style="background:#f8fafc;border-radius:12px;padding:1rem;margin-bottom:0.85rem;">
+            <div style="display:flex;gap:0.75rem;">
+              <div style="flex:1;">
+                <label class="form-label">Interested Plan</label>
+                <select id="iPlan">
+                  <option value="">— No plan selected —</option>
+                  ${plans.map((p) => `<option value="${p.id}">${escapeHtml(p.name)} — ₹${p.price}</option>`).join('')}
+                </select>
+              </div>
+              <div style="flex:1;"><label class="form-label">Visit Date</label><input id="iVisitDate" type="date" value="${today}"></div>
+            </div>
+          </div>
+          <div style="margin-bottom:0.75rem;"><label class="form-label">Notes</label><textarea id="iNote" rows="2" placeholder="Anything worth remembering about this lead..."></textarea></div>
+          <p class="error" id="addError" style="display:none;"></p>
+          <div class="modal-actions">
+            <button type="button" class="btn-outline-sm" onclick="document.getElementById('addModal').remove()">Cancel</button>
+            <button type="submit" class="btn-primary-sm"><i class="fas fa-plus"></i> Add Inquiry</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `);
+  document.getElementById('addModal').addEventListener('click', (e) => { if (e.target.id === 'addModal') e.target.remove(); });
+  document.getElementById('addForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('addError');
+    try {
+      await api.post('/inquiries', {
+        name: document.getElementById('iName').value,
+        phone: document.getElementById('iPhone').value,
+        email: document.getElementById('iEmail').value,
+        plan_id: document.getElementById('iPlan').value ? Number(document.getElementById('iPlan').value) : null,
+        visit_date: document.getElementById('iVisitDate').value || null,
+        note: document.getElementById('iNote').value,
+      });
+      document.getElementById('addModal').remove();
+      load();
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    }
+  });
+}
+
+function openDeleteModal(id, name) {
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal-backdrop-custom" id="deleteModal">
+      <div class="modal-box">
+        <h3>Delete Inquiry?</h3>
+        <p>Delete inquiry for ${name}? This cannot be undone.</p>
+        <div class="modal-actions">
+          <button class="btn-outline-sm" onclick="document.getElementById('deleteModal').remove()">Cancel</button>
+          <button style="background:#ef4444;color:#fff;border:none;padding:0.45rem 1rem;border-radius:8px;font-size:0.82rem;font-weight:700;cursor:pointer;" onclick="confirmDeleteInquiry(${id})"><i class="fas fa-trash-alt" style="margin-right:6px;"></i>Delete</button>
+        </div>
+      </div>
+    </div>
+  `);
+  document.getElementById('deleteModal').addEventListener('click', (e) => { if (e.target.id === 'deleteModal') e.target.remove(); });
+}
+
+async function confirmDeleteInquiry(id) {
+  await api.del(`/inquiries/${id}`);
+  document.getElementById('deleteModal').remove();
+  load();
+}
+
+load();
+</script>
+</body>
+</html>

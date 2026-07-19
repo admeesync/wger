@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fee Management — wger</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.6.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+<script src="/js/config.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+renderLayout('fees', 'Fee Management');
+let search = '';
+
+function contractRow(c) {
+  const today = new Date().toISOString().slice(0, 10);
+  let endCell = '<span style="color:#94a3b8;">No end</span>';
+  if (c.date_end) {
+    if (c.date_end < today) endCell = `<span style="color:#ef4444;font-weight:600;">${c.date_end}</span>`;
+    else if (c.date_end <= today) endCell = `<span style="color:#f59e0b;font-weight:600;">${c.date_end}</span>`;
+    else endCell = c.date_end;
+  }
+  let statusBadge;
+  if (c.is_active) {
+    statusBadge = (c.date_end && c.date_end < today) ? '<span class="badge-expiring">Overdue</span>' : '<span class="badge-active">Active</span>';
+  } else {
+    statusBadge = '<span class="badge-inactive">Inactive</span>';
+  }
+  return `
+    <tr>
+      <td><div style="display:flex;align-items:center;gap:10px;">
+        <div class="member-avatar">${c.member_username.slice(0,2).toUpperCase()}</div>
+        <div><div style="font-weight:600;font-size:0.85rem;">${escapeHtml(c.member_username)}</div><div style="color:#94a3b8;font-size:0.72rem;">@${escapeHtml(c.member_username)}</div></div>
+      </div></td>
+      <td style="font-size:0.82rem;"><span style="color:#94a3b8;">—</span></td>
+      <td style="font-weight:700;font-size:0.9rem;color:#10b981;">₹${c.amount}</td>
+      <td style="font-size:0.8rem;color:#64748b;">—</td>
+      <td style="font-size:0.8rem;color:#64748b;">${c.date_start}</td>
+      <td style="font-size:0.8rem;">${endCell}</td>
+      <td>${statusBadge}</td>
+      <td><div style="display:flex;gap:0.35rem;"><a href="/member.html?id=${c.member_id}" class="btn-outline-sm" style="padding:0.3rem 0.6rem;font-size:0.75rem;" title="View Member"><i class="fas fa-eye"></i></a></div></td>
+    </tr>`;
+}
+
+function render(contracts) {
+  const filtered = search ? contracts.filter((c) => c.member_username.toLowerCase().includes(search.toLowerCase())) : contracts;
+  const totalRevenue = contracts.filter((c) => c.is_active).reduce((sum, c) => sum + parseFloat(c.amount), 0);
+  const today = new Date().toISOString().slice(0, 10);
+  const overdueCount = contracts.filter((c) => c.is_active && c.date_end && c.date_end < today).length;
+
+  document.getElementById('pageBody').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
+      <div><div style="font-size:1.3rem;font-weight:800;color:#0f172a;">Fee Management</div><div style="color:#64748b;font-size:0.82rem;">Contracts, payments & renewals</div></div>
+      <div style="display:flex;gap:0.5rem;">
+        <div class="search-wrap"><i class="fas fa-search"></i><input type="text" id="searchInput" value="${escapeHtml(search)}" class="search-input" placeholder="Search member..."></div>
+        ${search ? '<button class="btn-outline-sm" id="clearSearch">Clear</button>' : ''}
+      </div>
+    </div>
+    <div class="row g-3 mb-4">
+      <div class="col-12 col-sm-6 col-xl-4"><div class="stat-card"><div class="stat-icon green"><i class="fas fa-rupee-sign"></i></div><div><div class="stat-value">₹${Math.round(totalRevenue)}</div><div class="stat-label">Active Revenue</div></div></div></div>
+      <div class="col-12 col-sm-6 col-xl-4"><div class="stat-card"><div class="stat-icon orange"><i class="fas fa-exclamation-triangle"></i></div><div><div class="stat-value">${overdueCount}</div><div class="stat-label">Overdue Contracts</div></div></div></div>
+      <div class="col-12 col-sm-6 col-xl-4"><div class="stat-card"><div class="stat-icon purple"><i class="fas fa-file-contract"></i></div><div><div class="stat-value">${contracts.length}</div><div class="stat-label">Total Records</div></div></div></div>
+    </div>
+    <div class="card">
+      ${filtered.length ? `<div style="overflow-x:auto;"><table class="table-clean">
+        <thead><tr><th>Member</th><th>Plan / Type</th><th>Amount</th><th>Payment</th><th>Start Date</th><th>End Date</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${filtered.map(contractRow).join('')}</tbody>
+      </table></div>` : `<div class="empty-state"><i class="fas fa-file-contract"></i><p>No contracts found${search ? ` for "${escapeHtml(search)}"` : ''}.</p></div>`}
+    </div>
+  `;
+
+  document.getElementById('searchInput').addEventListener('input', (e) => { search = e.target.value; render(contracts); });
+  const clearBtn = document.getElementById('clearSearch');
+  if (clearBtn) clearBtn.addEventListener('click', () => { search = ''; render(contracts); });
+}
+
+api.get('/contracts').then(render).catch((err) => { document.getElementById('pageBody').innerHTML = `<p class="error">${err.message}</p>`; });
+</script>
+</body>
+</html>
