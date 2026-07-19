@@ -285,7 +285,7 @@
             </div>
         </div>
 
-        <button type="submit" class="btn-login">
+        <button type="submit" class="btn-login" id="loginBtn">
             <i class="fas fa-sign-in-alt me-2"></i> Sign In
         </button>
     </form>
@@ -317,12 +317,18 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errorEl = document.getElementById('error');
     errorEl.style.display = 'none';
+    const btn = document.getElementById('loginBtn');
+    const btnHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Signing in…';
     try {
         await login(document.getElementById('username').value, document.getElementById('password').value);
         window.location.href = '/index.html';
     } catch (err) {
         document.getElementById('errorText').textContent = 'Invalid username or password. Please try again.';
         errorEl.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = btnHtml;
     }
 });
 </script>

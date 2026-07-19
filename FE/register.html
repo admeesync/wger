@@ -296,7 +296,7 @@
                 </div>
             </div>
 
-            <button type="submit" class="btn-register" style="margin-top:0.5rem;">
+            <button type="submit" class="btn-register" id="registerBtn" style="margin-top:0.5rem;">
                 <i class="fas fa-user-plus me-2"></i> Create Account
             </button>
         </form>
@@ -320,6 +320,10 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     e.preventDefault();
     const errorEl = document.getElementById('error');
     errorEl.style.display = 'none';
+    const btn = document.getElementById('registerBtn');
+    const btnHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Creating account…';
     try {
         await api.post('/auth/register', {
             gym_name: document.getElementById('gym_name').value,
@@ -332,6 +336,8 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     } catch (err) {
         document.getElementById('errorText').textContent = err.message;
         errorEl.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = btnHtml;
     }
 });
 </script>
