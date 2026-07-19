@@ -64,3 +64,10 @@ app.include_router(contract_config.router, prefix='/api')
 @app.get('/api/health')
 def health():
     return {'status': 'ok'}
+
+
+import os
+# Mount frontend files at the root
+frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../FE'))
+if os.path.exists(frontend_dir):
+    app.mount('/', StaticFiles(directory=frontend_dir, html=True), name='frontend')
