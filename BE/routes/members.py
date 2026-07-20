@@ -17,7 +17,7 @@ from models.member_document import MemberDocument
 from models.member_photo import MemberPhoto
 from models.photo_upload_token import PhotoUploadToken
 from models.user import User
-from repository import contract_repo, member_document_repo, member_photo_repo, member_repo, membership_plan_repo
+from repository import attendance_repo, contract_repo, member_document_repo, member_photo_repo, member_repo, membership_plan_repo
 from schema.user import BirthdayOut, MemberCreate, MemberOut, MemberStatus, MemberUpdate
 from service.gym_service import contract_status
 from settings.settings import settings
@@ -156,10 +156,7 @@ def update_member(
     return member
 
 
-@router.delete('/{member_id}', status_code=status.HTTP_204_NO_CONTENT)
-def delete_member(member_id: int, db: Session = Depends(get_db), staff: User = Depends(require_gym_staff)):
-    member = _get_member_in_gym(db, member_id, staff.gym_id)
-
+def _delete_member_files_and_records(db: Session, member_id: int) -> None:
     photo = member_photo_repo.get_for_member(db, member_id)
     if photo:
         supabase_storage.delete(photo.file_path)
@@ -172,14 +169,35 @@ def delete_member(member_id: int, db: Session = Depends(get_db), staff: User = D
     if contract_ids:
         db.execute(contract_options_table.delete().where(contract_options_table.c.contract_id.in_(contract_ids)))
     db.query(Contract).filter(Contract.member_id == member_id).delete()
-    db.query(Attendance).filter(Attendance.member_id == member_id).delete()
     db.query(AdminNote).filter(AdminNote.member_id == member_id).delete()
     db.query(MemberDocument).filter(MemberDocument.member_id == member_id).delete()
     db.query(PhotoUploadToken).filter(PhotoUploadToken.member_id == member_id).delete()
     db.query(MemberPhoto).filter(MemberPhoto.member_id == member_id).delete()
+
+
+@router.delete('/{member_id}', status_code=status.HTTP_204_NO_CONTENT)
+def delete_member(member_id: int, db: Session = Depends(get_db), staff: User = Depends(require_gym_staff)):
+    member = _get_member_in_gym(db, member_id, staff.gym_id)
+    _delete_member_files_and_records(db, member_id)
+    db.query(Attendance).filter(Attendance.member_id == member_id).delete()
     db.commit()
 
     member_repo.delete(db, member)
+
+
+def _absorb_duplicate(db: Session, duplicate: Member, target: Member) -> None:
+    """A biometric sync auto-creates a placeholder member before it's linked
+    to the real one. Once the real member claims that Empcode, fold the
+    placeholder's attendance into it (skipping dates the target already has,
+    so a manual entry isn't clobbered) and remove the placeholder."""
+    for punch in db.query(Attendance).filter(Attendance.member_id == duplicate.id):
+        if attendance_repo.get_for_member_on_date(db, target.id, punch.date):
+            db.delete(punch)
+        else:
+            punch.member_id = target.id
+    _delete_member_files_and_records(db, duplicate.id)
+    db.commit()
+    member_repo.delete(db, duplicate)
 
 
 @router.post('/{member_id}/set-device-id', response_model=MemberOut)
@@ -188,7 +206,24 @@ def set_device_id(
     device_user_id: str = Body('', embed=True),
 ):
     member = _get_member_in_gym(db, member_id, staff.gym_id)
-    member.device_user_id = device_user_id or None
+    device_user_id = device_user_id or None
+
+    if device_user_id:
+        duplicate = member_repo.get_by_device_user_id(db, staff.gym_id, device_user_id)
+        if duplicate and duplicate.id != member.id:
+            # A biometric sync names its placeholder members this way (see
+            # etimeoffice_service._get_or_create_member) - that's the only
+            # case where auto-absorbing the duplicate is safe. Anything else
+            # means this Device ID is already claimed by a real member.
+            placeholder_username = f'gym{staff.gym_id}_machine_{device_user_id}'
+            if duplicate.username != placeholder_username:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    f'Device ID "{device_user_id}" is already assigned to {duplicate.get_full_name()}.',
+                )
+            _absorb_duplicate(db, duplicate, member)
+
+    member.device_user_id = device_user_id
     db.commit()
     db.refresh(member)
     return member
