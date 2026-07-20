@@ -249,8 +249,10 @@ async function render(member, contracts, status, attendance, notes, documents) {
 
   document.getElementById('deviceForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    await api.post(`/members/${memberId}/set-device-id`, { device_user_id: document.getElementById('deviceIdInput').value });
-    load();
+    try {
+      await api.post(`/members/${memberId}/set-device-id`, { device_user_id: document.getElementById('deviceIdInput').value });
+      load();
+    } catch (err) { alert(err.message); }
   });
 
   document.getElementById('noteForm').addEventListener('submit', async (e) => {
