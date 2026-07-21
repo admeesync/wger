@@ -1,5 +1,5 @@
 import calendar
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -52,7 +52,7 @@ def summary(db: Session = Depends(get_db), staff: User = Depends(require_gym_sta
         )
 
     recent_members = member_repo.recent_by_gym(db, staff.gym_id, limit=5)
-    recent_attendance = sorted(attendance, key=lambda a: (a.date, a.time_in or ''), reverse=True)[:5]
+    recent_attendance = sorted(attendance, key=lambda a: (a.date, a.time_in or time.min), reverse=True)[:5]
     member_by_id = {m.id: m for m in members}
 
     return DashboardSummary(
